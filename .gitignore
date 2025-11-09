@@ -1,0 +1,26 @@
+# creds & local env
+.env
+*.env
+!/.env.example
+*.env.local
+credentials*.json
+*.json
+*.pem
+*.p12
+*.key
+*.crt
+
+# outputs
+records.csv
+unmatched_albums.csv
+unmatched_tracks.csv
+vision_results.json
+*.log
+
+# mac & python fluff
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+.cache
+.cache/
