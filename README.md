@@ -337,6 +337,27 @@ Use this to manually review and add individual tracks to Spotify later.
 
 ## Architecture
 
+### Codebase Structure
+
+The codebase has been refactored into modular components for better maintainability:
+
+- **`vinyl_bulk.py`** - Main entry point with CLI argument parsing and orchestration
+- **`config.py`** - Environment variable loading and configuration management
+- **`helpers.py`** - Utility functions (GCS URI parsing, URL extraction, confidence scoring)
+- **`vision_cache.py`** - Vision API result caching to avoid redundant API calls
+- **`http_client.py`** - HTTP retry logic with exponential backoff for API calls
+- **`discogs_api.py`** - All Discogs API interactions (releases, collections, folders, conditions)
+- **`spotify_api.py`** - Spotify API client functions (authentication, search, playlists)
+- **`vision_api.py`** - Google Cloud Vision API batch processing
+- **`workflows.py`** - Main processing workflows (image processing, collection updates, folder organization)
+- **`spotify_playlists.py`** - Spotify playlist building workflow and orchestration
+
+This modular structure makes the codebase:
+- **Easier to maintain** - Each module has a single, clear responsibility
+- **More testable** - Modules can be tested independently
+- **More readable** - Smaller files are easier to understand and navigate
+- **More reusable** - Modules can be imported by other scripts
+
 ### Why Sync Vision (bytes) Instead of Async (gs://)?
 
 - No need to grant the Google-managed Vision service agent IAM on your bucket
