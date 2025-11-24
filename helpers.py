@@ -19,10 +19,9 @@ def filename_from_gcs_uri(uri: str) -> str:
     p = urlparse(uri)
     return posixpath.basename(p.path)
 
-def owner_from_gcs_uri(uri: str) -> str:
-    """Extract folder name from gs://bucket/covers/<Owner>/<Subfolder>/file.jpg
-    Returns 'Owner_Subfolder' format, joining all subdirectories with underscores.
-    Example: gs://bucket/covers/Dad/Shed/image.jpg -> 'Dad_Shed'
+def extract_owner_from_uri(uri: str) -> str:
+    """Extract the owner (first folder after 'covers/') from GCS URI.
+    Returns just the owner name, e.g., 'Dad' from 'covers/Dad/Shed/image.jpg'
     """
     if not uri:
         return ""
@@ -30,17 +29,68 @@ def owner_from_gcs_uri(uri: str) -> str:
     path = p.path.lstrip("/")
     if path.startswith(GCS_BUCKET + "/"):
         path = path[len(GCS_BUCKET) + 1:]
-    rel = path[len(config.INPUT_PREFIX):] if path.startswith(config.INPUT_PREFIX) else path
+    
+    # Remove the base prefix (typically "covers/")
+    base_prefix = "covers/"
+    if path.startswith(base_prefix):
+        rel_path = path[len(base_prefix):]
+    else:
+        # If path doesn't start with "covers/", try to find where folders start
+        # by removing INPUT_PREFIX if it's more specific
+        if path.startswith(config.INPUT_PREFIX):
+            # Extract folders from INPUT_PREFIX itself
+            prefix_without_base = config.INPUT_PREFIX
+            if prefix_without_base.startswith(base_prefix):
+                prefix_without_base = prefix_without_base[len(base_prefix):]
+            prefix_parts = [p for p in prefix_without_base.rstrip("/").split("/") if p]
+            if prefix_parts:
+                return prefix_parts[0]  # Return first folder after "covers"
+        rel_path = path
+    
+    # Split and get first folder component (the owner)
+    parts = [p for p in rel_path.split("/") if p]
+    if parts:
+        return parts[0]  # First folder after "covers" is the owner
+    return ""
+
+def owner_from_gcs_uri(uri: str) -> str:
+    """Extract Discogs folder name from gs://bucket/covers/<Owner>/<Subfolder>/file.jpg
+    Returns 'Owner_Subfolder' format, joining all subdirectories with underscores.
+    Example: gs://bucket/covers/Dad/Shed/image.jpg -> 'Dad_Shed'
+    
+    When INPUT_PREFIX includes folder structure (e.g., 'covers/Dad/Shed/'), extracts
+    folder name from INPUT_PREFIX itself if file is directly under it.
+    """
+    if not uri:
+        return ""
+    p = urlparse(uri)
+    path = p.path.lstrip("/")
+    if path.startswith(GCS_BUCKET + "/"):
+        path = path[len(GCS_BUCKET) + 1:]
+    
+    # Remove base prefix "covers/" to get relative path
+    base_prefix = "covers/"
+    if path.startswith(base_prefix):
+        rel_path = path[len(base_prefix):]
+    else:
+        # Path doesn't start with "covers/", try to extract from INPUT_PREFIX
+        if path.startswith(config.INPUT_PREFIX):
+            # Extract folders from INPUT_PREFIX itself
+            prefix_without_base = config.INPUT_PREFIX
+            if prefix_without_base.startswith(base_prefix):
+                prefix_without_base = prefix_without_base[len(base_prefix):]
+            prefix_parts = [p for p in prefix_without_base.rstrip("/").split("/") if p]
+            return "_".join(prefix_parts) if prefix_parts else ""
+        rel_path = path
     
     # Split path into components and remove the filename (last component)
-    parts = [p for p in rel.split("/") if p]  # Filter out empty strings
+    parts = [p for p in rel_path.split("/") if p]  # Filter out empty strings
     if not parts:
         return ""
     
     # If there's only one component, it's the filename (no folders)
-    # If there are 2+ components, the last is the filename, the rest are folders
     if len(parts) == 1:
-        # No folders, just a filename directly in config.INPUT_PREFIX
+        # File is directly under "covers/" with no subfolders
         return ""
     
     # Remove filename (last component) and keep directory components

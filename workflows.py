@@ -15,7 +15,7 @@ from config import (
     GCS_BUCKET, DISCOGS_USER, DISCOGS_TOKEN, DISCOGS_FOLDER_ID,
     DISCOGS_MEDIA_CONDITION, DISCOGS_SLEEVE_CONDITION
 )
-from helpers import gcs_uri, filename_from_gcs_uri, owner_from_gcs_uri, split_top_candidate_urls, extract_release_or_master, confidence_bucket
+from helpers import gcs_uri, filename_from_gcs_uri, extract_owner_from_uri, owner_from_gcs_uri, split_top_candidate_urls, extract_release_or_master, confidence_bucket
 from vision_cache import load_vision_cache, get_vision_result, set_vision_result, save_vision_cache
 from vision_api import run_vision_sync
 from discogs_api import (
@@ -100,43 +100,47 @@ def organize_folders_workflow():
     df = pd.read_csv(csv_file)
     print(f"Loaded {len(df)} records from {csv_file}")
     
-    # Build mapping of release_id -> owner for matched releases
+    # Build mapping of release_id -> discogs_folder_name for matched releases
+    # Extract Discogs folder name from URI (not CSV owner, which is just first folder)
     matched_df = df[df["status"] == "matched"]
-    release_to_owner = {}
+    release_to_folder = {}
     for _, row in matched_df.iterrows():
         rid = row.get("discogs_release_id")
-        owner = row.get("owner", "")
-        if rid and owner:
+        src_uri = row.get("image_gcs_uri", "")
+        if rid and src_uri:
             try:
-                release_to_owner[int(rid)] = owner
+                # Extract full Discogs folder name (e.g., "Dad_Shed") from URI
+                discogs_folder_name = owner_from_gcs_uri(src_uri)
+                if discogs_folder_name:  # Only add if we have a folder name
+                    release_to_folder[int(rid)] = discogs_folder_name
             except (ValueError, TypeError):
                 continue
     
-    if not release_to_owner:
+    if not release_to_folder:
         print("No matched releases found in CSV. Nothing to organize.")
         return
     
     # Create folders and organize releases
-    unique_owners = set(release_to_owner.values())
-    print(f"Found {len(unique_owners)} unique owners: {', '.join(sorted(unique_owners))}")
+    unique_folders = set(release_to_folder.values())
+    print(f"Found {len(unique_folders)} unique Discogs folders: {', '.join(sorted(unique_folders))}")
     
-    # Create folders for each owner
-    owner_folders = {}
-    for owner in unique_owners:
-        if not owner:
+    # Create folders for each unique folder name
+    discogs_folders = {}
+    for folder_name in unique_folders:
+        if not folder_name:
             continue
-        folder_id = discogs_get_or_create_folder(DISCOGS_USER, owner)
+        folder_id = discogs_get_or_create_folder(DISCOGS_USER, folder_name)
         if folder_id:
-            owner_folders[owner] = folder_id
+            discogs_folders[folder_name] = folder_id
             time.sleep(0.5)  # Rate limiting
     
     # Move releases to appropriate folders
     moved_count = 0
-    total_to_move = len(release_to_owner)
+    total_to_move = len(release_to_folder)
     found_in_uncategorized = 0
     
-    for move_idx, (rid, owner) in enumerate(release_to_owner.items(), 1):
-        if not owner or owner not in owner_folders:
+    for move_idx, (rid, folder_name) in enumerate(release_to_folder.items(), 1):
+        if not folder_name or folder_name not in discogs_folders:
             continue
         
         try:
@@ -146,7 +150,7 @@ def organize_folders_workflow():
                 continue
             
             found_in_uncategorized += 1
-            target_folder_id = owner_folders[owner]
+            target_folder_id = discogs_folders[folder_name]
             if current_folder_id != target_folder_id:
                 success = discogs_move_instance(
                     DISCOGS_USER, rid, instance_id, 
@@ -161,12 +165,12 @@ def organize_folders_workflow():
                 # Already in correct folder
                 moved_count += 1
         except Exception as e:
-            print(f"Warning: Failed to move release {rid} to folder '{owner}': {e}")
-    
-    if found_in_uncategorized == 0:
-        print("No records found in Uncategorized folder. Nothing to move.")
-    else:
-        print(f"Moved {moved_count} releases to owner folders.")
+            print(f"Warning: Failed to move release {rid} to folder '{folder_name}': {e}")
+        
+        if found_in_uncategorized == 0:
+            print("No records found in Uncategorized folder. Nothing to move.")
+        else:
+            print(f"Moved {moved_count} releases to Discogs folders.")
 
 
 def process_vision_responses(resp_dicts, test_mode=False):
@@ -181,7 +185,7 @@ def process_vision_responses(resp_dicts, test_mode=False):
             print(f"Processing image {idx}/{total_images}...")
         src_uri = (resp.get("context") or {}).get("uri")
         image_filename = filename_from_gcs_uri(src_uri) if src_uri else ""
-        owner = owner_from_gcs_uri(src_uri)
+        owner = extract_owner_from_uri(src_uri)  # CSV owner: first folder after "covers"
         
         # Per-response Vision errors
         err = resp.get("error")
@@ -362,13 +366,17 @@ def process_vision_responses(resp_dicts, test_mode=False):
     return rows
 
 
-def add_to_collection_and_organize(release_to_owner):
-    """Add releases to collection and organize into folders."""
+def add_to_collection_and_organize(release_to_folder):
+    """Add releases to collection and organize into folders.
+    
+    Args:
+        release_to_folder: Dict mapping release_id -> discogs_folder_name (e.g., "Dad_Shed")
+    """
     if not DISCOGS_USER or not DISCOGS_TOKEN:
         print("Skipping Discogs add: DISCOGS_USER or DISCOGS_TOKEN not set.")
         return
     
-    to_add = list(release_to_owner.keys())
+    to_add = list(release_to_folder.keys())
     print(f"Adding {len(to_add)} releases…")
     added = 0
     total_to_add = len(to_add)
@@ -398,28 +406,28 @@ def add_to_collection_and_organize(release_to_owner):
             print(f"Add failed for release {rid} ({add_idx}/{total_to_add}): {e}")
     print(f"Added {added} releases.")
     
-    # Create folders and organize releases by owner
-    print("Organizing releases into owner folders...")
+    # Create folders and organize releases by Discogs folder name
+    print("Organizing releases into Discogs folders...")
     if DISCOGS_USER and DISCOGS_TOKEN:
-        # Get unique owners from releases we just added
-        unique_owners = set(release_to_owner.values())
+        # Get unique folder names from releases we just added
+        unique_folders = set(release_to_folder.values())
         
-        # Create folders for each owner
-        owner_folders = {}
-        for owner in unique_owners:
-            if not owner:
+        # Create folders for each unique folder name
+        discogs_folders = {}
+        for folder_name in unique_folders:
+            if not folder_name:
                 continue
-            folder_id = discogs_get_or_create_folder(DISCOGS_USER, owner)
+            folder_id = discogs_get_or_create_folder(DISCOGS_USER, folder_name)
             if folder_id:
-                owner_folders[owner] = folder_id
+                discogs_folders[folder_name] = folder_id
                 time.sleep(0.5)  # Rate limiting
         
         # Move releases to appropriate folders
         moved_count = 0
         found_in_uncategorized = 0
         
-        for rid, owner in release_to_owner.items():
-            if not owner or owner not in owner_folders:
+        for rid, folder_name in release_to_folder.items():
+            if not folder_name or folder_name not in discogs_folders:
                 continue
             
             try:
@@ -429,7 +437,7 @@ def add_to_collection_and_organize(release_to_owner):
                     continue
                 
                 found_in_uncategorized += 1
-                target_folder_id = owner_folders[owner]
+                target_folder_id = discogs_folders[folder_name]
                 if current_folder_id != target_folder_id:
                     success = discogs_move_instance(
                         DISCOGS_USER, rid, instance_id, 
@@ -439,12 +447,12 @@ def add_to_collection_and_organize(release_to_owner):
                         moved_count += 1
                     time.sleep(0.8)  # Rate limiting
             except Exception as e:
-                print(f"Warning: Failed to move release {rid} to folder '{owner}': {e}")
+                print(f"Warning: Failed to move release {rid} to folder '{folder_name}': {e}")
         
         if found_in_uncategorized == 0:
             print("No records found in Uncategorized folder. Nothing to move.")
         else:
-            print(f"Moved {moved_count} releases to owner folders.")
+            print(f"Moved {moved_count} releases to Discogs folders.")
 
 
 def main_workflow(test_discogs_match=False):
@@ -598,21 +606,25 @@ def main_workflow(test_discogs_match=False):
     
     # Add matched releases to Discogs collection (skip duplicates)
     add_mask = (df["status"] == "matched") & (~df["already_in_collection"])
-    # Build mapping of release_id -> owner for folder organization
-    release_to_owner = {}
+    # Build mapping of release_id -> discogs_folder_name for folder organization
+    # Note: CSV "owner" is just the first folder, but Discogs folder name includes all subfolders
+    release_to_folder = {}
     for _, row in df.loc[add_mask].iterrows():
         rid = row.get("discogs_release_id")
-        owner = row.get("owner", "")
-        if rid and owner:
+        src_uri = row.get("image_gcs_uri", "")
+        if rid and src_uri:
             try:
-                release_to_owner[int(rid)] = owner
+                # Extract full Discogs folder name (e.g., "Dad_Shed") from URI
+                discogs_folder_name = owner_from_gcs_uri(src_uri)
+                if discogs_folder_name:  # Only add if we have a folder name
+                    release_to_folder[int(rid)] = discogs_folder_name
             except (ValueError, TypeError):
                 continue
     
-    skipped_dupes = int((df["status"] == "matched").sum() - len(release_to_owner))
-    print(f"Adding {len(release_to_owner)} releases (skipped {skipped_dupes} already in your collection)…")
+    skipped_dupes = int((df["status"] == "matched").sum() - len(release_to_folder))
+    print(f"Adding {len(release_to_folder)} releases (skipped {skipped_dupes} already in your collection)…")
     
-    add_to_collection_and_organize(release_to_owner)
+    add_to_collection_and_organize(release_to_folder)
     
     # Update collection items with null conditions
     update_conditions_workflow()
