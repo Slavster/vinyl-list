@@ -100,7 +100,10 @@ def filename_from_gcs_uri(uri: str) -> str:
     return posixpath.basename(p.path)
 
 def owner_from_gcs_uri(uri: str) -> str:
-    """Extract 'Dad' or 'Pat' from gs://slav-vinyl/covers/<Owner>/file.jpg"""
+    """Extract folder name from gs://bucket/covers/<Owner>/<Subfolder>/file.jpg
+    Returns 'Owner_Subfolder' format, joining all subdirectories with underscores.
+    Example: gs://bucket/covers/Dad/Shed/image.jpg -> 'Dad_Shed'
+    """
     if not uri:
         return ""
     p = urlparse(uri)
@@ -108,7 +111,23 @@ def owner_from_gcs_uri(uri: str) -> str:
     if path.startswith(GCS_BUCKET + "/"):
         path = path[len(GCS_BUCKET) + 1:]
     rel = path[len(INPUT_PREFIX):] if path.startswith(INPUT_PREFIX) else path
-    return rel.split("/", 1)[0] if "/" in rel else ""
+    
+    # Split path into components and remove the filename (last component)
+    parts = [p for p in rel.split("/") if p]  # Filter out empty strings
+    if not parts:
+        return ""
+    
+    # If there's only one component, it's the filename (no folders)
+    # If there are 2+ components, the last is the filename, the rest are folders
+    if len(parts) == 1:
+        # No folders, just a filename directly in INPUT_PREFIX
+        return ""
+    
+    # Remove filename (last component) and keep directory components
+    folder_parts = parts[:-1]
+    
+    # Join all folder components with underscores
+    return "_".join(folder_parts) if folder_parts else ""
 
 def extract_release_or_master(url: str):
     """Return ('release'|'master', id) if URL matches Discogs structure."""
@@ -2158,6 +2177,8 @@ if __name__ == "__main__":
                         help='Process first 10 images, show Discogs match results, but do not write CSV or update collection.')
     parser.add_argument('--build-spotify-playlists', action='store_true',
                         help='Skip all other steps and only build Spotify playlists from Discogs collection folders.')
+    parser.add_argument('--input-prefix', type=str, default=None,
+                        help='GCS prefix/path to process images from (e.g., "covers/Owner/" or "covers/2024/January/"). Overrides VINYL_INPUT_PREFIX env var.')
     args = parser.parse_args()
     
     # Validate flag combinations
@@ -2167,6 +2188,18 @@ if __name__ == "__main__":
     
     if not args.update_conditions_only and not args.organize_folders_only and not args.test_discogs_match and not args.build_spotify_playlists and not GCS_BUCKET:
         raise SystemExit("GCS_BUCKET is empty; set it at the top of the script.")
+    
+    # Override INPUT_PREFIX if --input-prefix argument is provided
+    if args.input_prefix:
+        input_prefix = args.input_prefix.strip()
+        # Skip override if input becomes empty after stripping (e.g., whitespace-only input)
+        if input_prefix:
+            # Ensure it ends with / if not empty
+            if not input_prefix.endswith('/'):
+                input_prefix = input_prefix + '/'
+            # Update the module-level INPUT_PREFIX for this run
+            globals()['INPUT_PREFIX'] = input_prefix
+            print(f"Using input prefix from command line: {input_prefix}")
     
     main(update_conditions_only=args.update_conditions_only, 
          organize_folders_only=args.organize_folders_only,

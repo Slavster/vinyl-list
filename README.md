@@ -60,7 +60,9 @@ export DISCOGS_FOLDER_ID=1
 export VISION_SYNC_CHUNK=8
 ```
 
-**Note:** .HEIC is not supported by Vision. Convert to JPG/PNG first.
+**Note:** 
+- `.HEIC` is not supported by Vision. Convert to JPG/PNG first.
+- `VINYL_INPUT_PREFIX` can be overridden at runtime using the `--input-prefix` command-line argument (see [Specifying a Subfolder](#specifying-a-subfolder) section).
 
 ### Optional: Collection Condition Defaults
 
@@ -123,9 +125,30 @@ If `DISCOGS_PLAYLIST_SOURCE_FOLDER` is set, builds one playlist from that folder
 
 Images should live under:
 ```
-gs://<bucket>/<INPUT_PREFIX>/<Owner>/*.jpg
+gs://<bucket>/<INPUT_PREFIX>/<Owner>/[<Subfolder>/...]/*.jpg
 # e.g., gs://your-bucket/covers/Name1/abc.jpg, covers/Name2/xyz.jpg
+# e.g., gs://your-bucket/covers/Dad/Shed/image.jpg (creates folder "Dad_Shed")
+# e.g., gs://your-bucket/covers/Dad/Shed/Collection/image.jpg (creates folder "Dad_Shed_Collection")
 ```
+
+**Folder Naming:** The script creates Discogs collection folders based on the directory structure after `INPUT_PREFIX`. Subfolders are joined with underscores:
+- `covers/Dad/image.jpg` → folder: **"Dad"**
+- `covers/Dad/Shed/image.jpg` → folder: **"Dad_Shed"**
+- `covers/Dad/Shed/Collection/image.jpg` → folder: **"Dad_Shed_Collection"**
+
+### Specifying a Subfolder
+
+You can specify a subfolder within your GCS bucket using the `--input-prefix` argument. This is useful when you want to process images from a specific directory structure:
+
+```bash
+# Process images from a single owner folder
+python vinyl_bulk.py --input-prefix "covers/Dad/"
+
+# The prefix will automatically have a trailing slash added if not provided
+python vinyl_bulk.py --input-prefix "covers/2024/January"
+```
+
+**Note:** The `--input-prefix` argument overrides the `VINYL_INPUT_PREFIX` environment variable. If not specified, the script uses the value from `VINYL_INPUT_PREFIX` (default: `"covers/"`).
 
 ### Full Run
 
@@ -133,6 +156,12 @@ Process all images, match with Discogs, and add to collection:
 
 ```bash
 python vinyl_bulk.py
+```
+
+Or process images from a specific subfolder:
+
+```bash
+python vinyl_bulk.py --input-prefix "covers/2024/January/"
 ```
 
 ### Test Discogs Matching
