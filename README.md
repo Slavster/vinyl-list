@@ -115,9 +115,40 @@ export SPOTIPY_CLIENT_ID=your_spotify_client_id
 export SPOTIPY_CLIENT_SECRET=your_spotify_client_secret
 export SPOTIPY_REDIRECT_URI=http://127.0.0.1:8888/callback
 export DISCOGS_PLAYLIST_SOURCE_FOLDER=FolderName  # optional: build playlist from single folder
+export SPOTIFY_PLAYLIST_URL=https://open.spotify.com/playlist/your_playlist_id  # optional: add to existing playlist
 ```
 
-If `DISCOGS_PLAYLIST_SOURCE_FOLDER` is set, builds one playlist from that folder. If not set, builds one playlist per custom folder (skips system folders).
+**Playlist Creation Modes:**
+
+- **If `SPOTIFY_PLAYLIST_URL` is set:** Adds tracks to the specified existing playlist instead of creating new ones. The script will:
+  - Fetch existing tracks from the playlist
+  - Process folders and collect tracks (respects `DISCOGS_PLAYLIST_SOURCE_FOLDER` and `--input-prefix` settings)
+  - **When `DISCOGS_PLAYLIST_SOURCE_FOLDER` is also set:** Only processes that specific folder and adds tracks from it
+  - Only add tracks that don't already exist in the playlist (de-duplication)
+  - **Never deletes tracks** from the playlist - only adds new ones
+  - Skip folder-based playlist creation entirely
+
+- **If `SPOTIFY_PLAYLIST_URL` is not set:** Creates new playlists per folder:
+  - If `DISCOGS_PLAYLIST_SOURCE_FOLDER` is set, builds one playlist from that folder
+  - If not set, builds one playlist per custom folder (skips system folders)
+
+**Folder Filtering:** When using `--input-prefix` to specify a GCS subfolder, the script will automatically filter Discogs folders to only include those that match folders found in the GCS prefix. For example, if you use `--input-prefix "covers/Dad/"`, only Discogs folders that correspond to folders under that GCS path (like "Dad", "Dad_Shed", etc.) will be processed for Spotify playlists.
+
+**Precedence Order:** When multiple folder selection options are used:
+1. **`--input-prefix`** (command-line) - **Highest priority** - Takes precedence over all other settings
+2. **`DISCOGS_PLAYLIST_SOURCE_FOLDER`** (environment variable) - Used only if `--input-prefix` is not set
+3. **Default behavior** - Processes all custom folders if neither is set
+
+**Combining Settings:** When using `SPOTIFY_PLAYLIST_URL` with `--input-prefix`:
+- `--input-prefix` takes precedence over `DISCOGS_PLAYLIST_SOURCE_FOLDER`
+- Only folders matching the GCS prefix are processed (ignores `DISCOGS_PLAYLIST_SOURCE_FOLDER` if both are set)
+- Only tracks from those folders that don't already exist in the playlist are added
+- Tracks are never deleted from the playlist
+
+**Playlist URL Formats:**
+- `https://open.spotify.com/playlist/{playlist_id}`
+- `spotify:playlist:{playlist_id}`
+- Direct playlist ID (22-character alphanumeric string)
 
 ## Usage
 
