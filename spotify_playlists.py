@@ -9,8 +9,9 @@ import time
 import pandas as pd
 from datetime import datetime
 
+import config
 from config import (
-    DISCOGS_USER, DISCOGS_TOKEN, INPUT_PREFIX,
+    DISCOGS_USER, DISCOGS_TOKEN,
     DISCOGS_PLAYLIST_SOURCE_FOLDER, SPOTIFY_PLAYLIST_URL
 )
 from discogs_api import (
@@ -94,14 +95,14 @@ def build_spotify_playlists():
         
         # Check if INPUT_PREFIX was customized (different from default)
         default_prefix = os.getenv("VINYL_INPUT_PREFIX", "covers/").strip()
-        prefix_was_customized = INPUT_PREFIX != default_prefix
+        prefix_was_customized = config.INPUT_PREFIX != default_prefix
         
         # If INPUT_PREFIX was customized, filter folders based on GCS structure
         gcs_folder_names = set()
         if prefix_was_customized:
-            print(f"\nINPUT_PREFIX was customized to: {INPUT_PREFIX}")
+            print(f"\nINPUT_PREFIX was customized to: {config.INPUT_PREFIX}")
             print("Extracting folder names from GCS paths...")
-            gcs_folder_names = get_folders_from_gcs_prefix(INPUT_PREFIX)
+            gcs_folder_names = get_folders_from_gcs_prefix(config.INPUT_PREFIX)
             if gcs_folder_names:
                 print(f"Found folders in GCS: {', '.join(sorted(gcs_folder_names))}")
             else:
@@ -116,7 +117,7 @@ def build_spotify_playlists():
                     if name in gcs_folder_names:
                         folders_to_process.append((folder_id, name))
             else:
-                print(f"Warning: No folders found in GCS under prefix '{INPUT_PREFIX}'. Nothing to process.")
+                print(f"Warning: No folders found in GCS under prefix '{config.INPUT_PREFIX}'. Nothing to process.")
                 return
         elif DISCOGS_PLAYLIST_SOURCE_FOLDER:
             # Single folder mode (only when --input-prefix is NOT set)
@@ -145,7 +146,7 @@ def build_spotify_playlists():
         # Print which folders will be processed
         folder_names = [name for _, name in folders_to_process]
         if prefix_was_customized:
-            print(f"\nProcessing {len(folders_to_process)} folder(s) from GCS prefix '{INPUT_PREFIX}' and adding tracks to existing playlist...")
+            print(f"\nProcessing {len(folders_to_process)} folder(s) from GCS prefix '{config.INPUT_PREFIX}' and adding tracks to existing playlist...")
             print(f"Folders: {', '.join(folder_names)}")
             if DISCOGS_PLAYLIST_SOURCE_FOLDER:
                 print(f"Note: --input-prefix takes precedence over DISCOGS_PLAYLIST_SOURCE_FOLDER='{DISCOGS_PLAYLIST_SOURCE_FOLDER}'")
@@ -336,14 +337,14 @@ def build_spotify_playlists():
     
     # Check if INPUT_PREFIX was customized (different from default)
     default_prefix = os.getenv("VINYL_INPUT_PREFIX", "covers/").strip()
-    prefix_was_customized = INPUT_PREFIX != default_prefix
+    prefix_was_customized = config.INPUT_PREFIX != default_prefix
     
     # If INPUT_PREFIX was customized, filter folders based on GCS structure
     gcs_folder_names = set()
     if prefix_was_customized:
-        print(f"\nINPUT_PREFIX was customized to: {INPUT_PREFIX}")
+        print(f"\nINPUT_PREFIX was customized to: {config.INPUT_PREFIX}")
         print("Extracting folder names from GCS paths...")
-        gcs_folder_names = get_folders_from_gcs_prefix(INPUT_PREFIX)
+        gcs_folder_names = get_folders_from_gcs_prefix(config.INPUT_PREFIX)
         if gcs_folder_names:
             print(f"Found folders in GCS: {', '.join(sorted(gcs_folder_names))}")
         else:
@@ -358,7 +359,7 @@ def build_spotify_playlists():
                 if name in gcs_folder_names:
                     folders_to_process.append((folder_id, name))
         else:
-            print(f"Warning: No folders found in GCS under prefix '{INPUT_PREFIX}'. Nothing to process.")
+            print(f"Warning: No folders found in GCS under prefix '{config.INPUT_PREFIX}'. Nothing to process.")
             return
     elif DISCOGS_PLAYLIST_SOURCE_FOLDER:
         # Single folder mode (only when --input-prefix is NOT set)

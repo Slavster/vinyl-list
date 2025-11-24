@@ -10,8 +10,9 @@ from google.cloud import vision, storage
 from google.cloud.exceptions import NotFound, Forbidden
 from google.auth.exceptions import DefaultCredentialsError
 
+import config
 from config import (
-    GCS_BUCKET, INPUT_PREFIX, DISCOGS_USER, DISCOGS_TOKEN, DISCOGS_FOLDER_ID,
+    GCS_BUCKET, DISCOGS_USER, DISCOGS_TOKEN, DISCOGS_FOLDER_ID,
     DISCOGS_MEDIA_CONDITION, DISCOGS_SLEEVE_CONDITION
 )
 from helpers import gcs_uri, filename_from_gcs_uri, owner_from_gcs_uri, split_top_candidate_urls, extract_release_or_master, confidence_bucket
@@ -452,7 +453,7 @@ def main_workflow(test_discogs_match=False):
     try:
         gcs = storage.Client()
         bucket = gcs.bucket(GCS_BUCKET)
-        imgs = [b.name for b in bucket.list_blobs(prefix=INPUT_PREFIX)
+        imgs = [b.name for b in bucket.list_blobs(prefix=config.INPUT_PREFIX)
                 if b.name.lower().endswith((".jpg", ".jpeg", ".png"))]
     except DefaultCredentialsError as e:
         creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "not set")
@@ -472,8 +473,8 @@ def main_workflow(test_discogs_match=False):
         raise SystemExit(f"Failed to access GCS bucket {GCS_BUCKET}: {type(e).__name__}: {e}")
     
     if not imgs:
-        raise SystemExit(f"No images found under gs://{GCS_BUCKET}/{INPUT_PREFIX}")
-    print(f"Found {len(imgs)} images under gs://{GCS_BUCKET}/{INPUT_PREFIX}")
+        raise SystemExit(f"No images found under gs://{GCS_BUCKET}/{config.INPUT_PREFIX}")
+    print(f"Found {len(imgs)} images under gs://{GCS_BUCKET}/{config.INPUT_PREFIX}")
     
     # Vision (SYNC: Web + Text; no GCS output needed)
     # Load existing Vision results

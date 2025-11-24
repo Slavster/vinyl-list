@@ -5,7 +5,8 @@ Helper utilities for GCS URI parsing, URL extraction, confidence scoring, and GC
 import re
 import posixpath
 from urllib.parse import urlparse
-from config import GCS_BUCKET, INPUT_PREFIX
+import config
+from config import GCS_BUCKET
 from google.cloud import storage
 
 
@@ -29,7 +30,7 @@ def owner_from_gcs_uri(uri: str) -> str:
     path = p.path.lstrip("/")
     if path.startswith(GCS_BUCKET + "/"):
         path = path[len(GCS_BUCKET) + 1:]
-    rel = path[len(INPUT_PREFIX):] if path.startswith(INPUT_PREFIX) else path
+    rel = path[len(config.INPUT_PREFIX):] if path.startswith(config.INPUT_PREFIX) else path
     
     # Split path into components and remove the filename (last component)
     parts = [p for p in rel.split("/") if p]  # Filter out empty strings
@@ -39,7 +40,7 @@ def owner_from_gcs_uri(uri: str) -> str:
     # If there's only one component, it's the filename (no folders)
     # If there are 2+ components, the last is the filename, the rest are folders
     if len(parts) == 1:
-        # No folders, just a filename directly in INPUT_PREFIX
+        # No folders, just a filename directly in config.INPUT_PREFIX
         return ""
     
     # Remove filename (last component) and keep directory components
